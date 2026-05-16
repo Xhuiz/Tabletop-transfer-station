@@ -1,5 +1,5 @@
 // Project: Tabletop transfer station (Electron)
-const { app, BrowserWindow, Tray, Menu, session, nativeImage, shell, Notification, clipboard, screen } = require('electron');
+const { app, BrowserWindow, Tray, Menu, session, nativeImage, shell, Notification, clipboard, screen, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { buildRelayConfig, isPlaceholderRelayConfig } = require('./relayConfig');
@@ -30,8 +30,14 @@ const APP_RELAY_CONFIG_PATH = path.join(__dirname, 'relay.config.json');
 const APP_DISPLAY_NAME = 'Tabletop transfer station';
 app.setName(APP_DISPLAY_NAME);
 
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+}
+
 let tray = null;
 let loginWin = null;
+let setupWin = null;
 let overlayWin = null;
 let refreshTimer = null;
 let overlayHoverTimer = null;
@@ -45,8 +51,9 @@ let lastInviteCodeText = '邀请码: -';
 let lastInviteLink = '';
 let isFetching = false;
 let loginDetectTimer = null;
-let exitConfirmUntil = 0;
 let refreshSeconds = 60;
+let pendingLoginCredentials = null;
+let setupIpcHandlersRegistered = false;
 let overlayEnabled = true;
 let overlayVisible = false;
 let overlayEdge = 'right';
@@ -110,6 +117,12 @@ function getUserRelayConfigPath() {
   return path.join(app.getPath('userData'), 'relay.config.json');
 }
 
+function reloadRelayConfig() {
+  relayConfig = null;
+  loadRelayConfig();
+  return relayConfig;
+}
+
 function loadRelayConfig() {
   try {
     relayConfig = buildRelayConfig(null, {
@@ -135,6 +148,20 @@ function ensureUserRelayConfigFile() {
   return userConfigPath;
 }
 
+function saveUserRelayBaseUrl(baseUrl) {
+  const userConfigPath = ensureUserRelayConfigFile();
+  let data = {};
+  try {
+    data = JSON.parse(fs.readFileSync(userConfigPath, 'utf8'));
+  } catch {
+    data = {};
+  }
+  data.baseUrl = baseUrl;
+  fs.writeFileSync(userConfigPath, JSON.stringify(data, null, 2));
+  reloadRelayConfig();
+  return userConfigPath;
+}
+
 function relayNeedsSetup() {
   return isPlaceholderRelayConfig(getRelayConfig());
 }
@@ -154,6 +181,210 @@ function setRelaySetupState() {
 
 function openRelayConfigFile() {
   return shell.openPath(ensureUserRelayConfigFile());
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function normalizeSetupBaseUrl(value) {
+  const parsed = new URL(String(value || '').trim());
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new Error('中转站 URL 必须以 http:// 或 https:// 开头');
+  }
+  parsed.pathname = parsed.pathname.replace(/\/+$/, '');
+  parsed.search = '';
+  parsed.hash = '';
+  return parsed.toString().replace(/\/$/, '');
+}
+
+function renderSetupHtml({ baseUrl = '', error = '' } = {}) {
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <style>
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      font-family: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+      background: #f6f8fb;
+      color: #172033;
+    }
+    body {
+      display: grid;
+      place-items: center;
+    }
+    .panel {
+      width: min(520px, calc(100vw - 48px));
+      padding: 26px;
+      border-radius: 10px;
+      background: #ffffff;
+      border: 1px solid #dde5f0;
+      box-shadow: 0 18px 45px rgba(23, 32, 51, 0.12);
+      box-sizing: border-box;
+    }
+    h1 {
+      margin: 0 0 18px;
+      font-size: 22px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+    label {
+      display: block;
+      margin: 14px 0 7px;
+      font-size: 13px;
+      color: #46566d;
+    }
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      height: 38px;
+      border: 1px solid #c8d3e2;
+      border-radius: 7px;
+      padding: 0 11px;
+      font-size: 14px;
+      outline: none;
+    }
+    input:focus {
+      border-color: #2386d9;
+      box-shadow: 0 0 0 3px rgba(35, 134, 217, 0.14);
+    }
+    .actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 22px;
+    }
+    button {
+      height: 38px;
+      border: 0;
+      border-radius: 7px;
+      padding: 0 16px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .primary {
+      color: #fff;
+      background: #1677c8;
+    }
+    .secondary {
+      color: #26364d;
+      background: #e9eef5;
+    }
+    .error {
+      min-height: 20px;
+      margin-top: 12px;
+      color: #b42318;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .note {
+      margin-top: 10px;
+      color: #69778a;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+  </style>
+</head>
+<body>
+  <form class="panel" id="setupForm">
+    <h1>登录 ${APP_DISPLAY_NAME}</h1>
+    <label for="baseUrl">中转站 URL</label>
+    <input id="baseUrl" name="baseUrl" type="url" required placeholder="https://your-relay.example.com" value="${escapeHtml(baseUrl)}" />
+    <label for="account">账号</label>
+    <input id="account" name="account" autocomplete="username" placeholder="手机号或邮箱" />
+    <label for="password">密码</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" placeholder="登录密码" />
+    <div class="note">URL 会保存到本地配置文件。账号和密码只用于本次打开登录页时自动填表，不会写入配置文件。</div>
+    <div class="error" id="error">${escapeHtml(error)}</div>
+    <div class="actions">
+      <button class="secondary" id="openConfig" type="button">打开配置文件</button>
+      <button class="primary" type="submit">保存并登录</button>
+    </div>
+  </form>
+  <script>
+    const { ipcRenderer } = require('electron');
+    const form = document.getElementById('setupForm');
+    const error = document.getElementById('error');
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      error.textContent = '';
+      const result = await ipcRenderer.invoke('setup-login-submit', {
+        baseUrl: form.baseUrl.value,
+        account: form.account.value,
+        password: form.password.value
+      });
+      if (!result.ok) error.textContent = result.error || '保存失败';
+    });
+    document.getElementById('openConfig').addEventListener('click', () => {
+      ipcRenderer.invoke('setup-open-config');
+    });
+  </script>
+</body>
+</html>`;
+}
+
+function registerSetupIpcHandlers() {
+  if (setupIpcHandlersRegistered) return;
+  setupIpcHandlersRegistered = true;
+
+  ipcMain.handle('setup-open-config', async () => {
+    await openRelayConfigFile();
+    return { ok: true };
+  });
+
+  ipcMain.handle('setup-login-submit', async (_event, payload) => {
+    try {
+      const baseUrl = normalizeSetupBaseUrl(payload?.baseUrl);
+      saveUserRelayBaseUrl(baseUrl);
+      pendingLoginCredentials = {
+        account: String(payload?.account || ''),
+        password: String(payload?.password || '')
+      };
+      if (setupWin && !setupWin.isDestroyed()) setupWin.close();
+      lastBalanceText = '未登录';
+      lastDetailText = '请在登录页完成登录';
+      lastPlanText = '-';
+      updateTrayMenu();
+      openLoginWindow();
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
+  });
+}
+
+function openSetupWindow() {
+  if (setupWin && !setupWin.isDestroyed()) {
+    setupWin.focus();
+    return;
+  }
+
+  registerSetupIpcHandlers();
+  const config = getRelayConfig();
+  setupWin = new BrowserWindow({
+    width: 620,
+    height: 520,
+    title: `登录 ${APP_DISPLAY_NAME}`,
+    autoHideMenuBar: true,
+    resizable: false,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false
+    }
+  });
+  setupWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(renderSetupHtml({
+    baseUrl: isPlaceholderRelayConfig(config) ? '' : config.baseUrl
+  }))}`);
+  setupWin.on('closed', () => {
+    setupWin = null;
+  });
 }
 
 function loadOverlayConfig() {
@@ -717,7 +948,7 @@ async function fetchWalletBalance() {
 function openLoginWindow() {
   if (relayNeedsSetup()) {
     setRelaySetupState();
-    openRelayConfigFile();
+    openSetupWindow();
     return;
   }
 
@@ -739,6 +970,26 @@ function openLoginWindow() {
   });
 
   loginWin.loadURL(getRelayConfig().urls.login);
+  loginWin.webContents.on('did-finish-load', async () => {
+    if (!pendingLoginCredentials) return;
+    const { account, password } = pendingLoginCredentials;
+    await loginWin.webContents.executeJavaScript(`
+      (() => {
+        const setValue = (element, value) => {
+          if (!element || !value) return false;
+          element.focus();
+          element.value = value;
+          element.dispatchEvent(new Event('input', { bubbles: true }));
+          element.dispatchEvent(new Event('change', { bubbles: true }));
+          return true;
+        };
+        const accountInput = document.querySelector('input[type="email"], input[type="tel"], input[name*="email" i], input[name*="phone" i], input[name*="user" i], input[autocomplete="username"], input:not([type]), input[type="text"]');
+        const passwordInput = document.querySelector('input[type="password"], input[autocomplete="current-password"]');
+        setValue(accountInput, ${JSON.stringify(account)});
+        setValue(passwordInput, ${JSON.stringify(password)});
+      })();
+    `).catch(() => {});
+  });
 
   loginWin.webContents.on('did-fail-load', (_event, code, desc, url) => {
     // Cloudflare / SPA jumps often trigger ERR_ABORTED(-3) on about:srcdoc.
@@ -763,6 +1014,7 @@ function openLoginWindow() {
   const tryHandleLoginSuccess = async () => {
     const ok = await hasValidSession();
     if (!ok) return;
+    pendingLoginCredentials = null;
     lastBalanceText = '登录成功';
     lastDetailText = '正在拉取余额...';
     updateTrayMenu();
@@ -856,6 +1108,10 @@ function updateTrayMenu() {
       click: () => openRelayConfigFile()
     },
     {
+      label: '打开登录设置',
+      click: () => openSetupWindow()
+    },
+    {
       label: '打开配置目录',
       click: () => shell.openPath(app.getPath('userData'))
     },
@@ -892,22 +1148,8 @@ function updateTrayMenu() {
     },
     { type: 'separator' },
     {
-      label: Date.now() < exitConfirmUntil ? '确认退出（再次点击）' : '退出（需二次确认）',
-      click: () => {
-        const now = Date.now();
-        if (now < exitConfirmUntil) {
-          app.quit();
-          return;
-        }
-        exitConfirmUntil = now + 10_000;
-        if (Notification.isSupported()) {
-          new Notification({
-            title: APP_DISPLAY_NAME,
-            body: '请在10秒内再次点击“退出”以确认'
-          }).show();
-        }
-        updateTrayMenu();
-      }
+      label: '退出',
+      click: () => app.quit()
     }
   ]);
 
@@ -923,6 +1165,7 @@ async function bootstrap() {
 
   if (relayNeedsSetup()) {
     setRelaySetupState();
+    openSetupWindow();
     return;
   }
 
@@ -932,17 +1175,30 @@ async function bootstrap() {
     lastDetailText = '初始化拉取...';
     updateTrayMenu();
     await fetchWalletBalance();
+    openSetupWindow();
   } else {
     lastBalanceText = '未登录';
-    lastDetailText = '请先登录';
+    lastDetailText = '请填写登录信息';
     updateTrayMenu();
-    openLoginWindow();
+    openSetupWindow();
   }
 
   restartRefreshTimer();
 }
 
 app.whenReady().then(bootstrap);
+
+app.on('second-instance', () => {
+  if (setupWin && !setupWin.isDestroyed()) {
+    setupWin.focus();
+    return;
+  }
+  if (loginWin && !loginWin.isDestroyed()) {
+    loginWin.focus();
+    return;
+  }
+  openSetupWindow();
+});
 
 app.on('window-all-closed', () => {
   // 托盘应用不自动退出
