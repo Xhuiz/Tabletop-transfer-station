@@ -2,7 +2,7 @@
 
 一个可配置中转站地址的桌面余额监控工具，支持 Windows 和 macOS。应用会常驻托盘/菜单栏，并提供可拖动、可缩放、自动吸附隐藏、鼠标靠近后丝滑滑出的桌面悬浮窗。
 
-默认配置使用占位域名 `https://relay.example.com`。本地部署后，把 `relay.config.json` 里的 `baseUrl` 改成你自己的中转站地址即可使用。
+默认配置使用占位域名 `https://relay.example.com`。本地部署后，把 `relay.config.json` 里的 `baseUrl` 改成你自己的中转站首页域名即可使用。登录设置窗口也可以直接粘贴控制台页面地址，应用会尽量自动提取正确域名。
 
 仓库地址：[https://github.com/Xhuiz/Tabletop-transfer-station](https://github.com/Xhuiz/Tabletop-transfer-station)
 
@@ -28,6 +28,8 @@ npm start
 
 首次启动或点击桌面快捷方式时，会先打开本地登录设置窗口。填写中转站 URL、账号和密码后，应用会保存 URL 到本地配置，并打开中转站登录页尝试自动填表。账号和密码只用于本次登录填表，不会写入配置文件。
 
+中转站 URL 通常填登录网站的首页域名，例如 `https://relay.example.com`，不要填写接口路径。部分站点的控制台地址也可以直接粘贴，应用会内置识别并修正。
+
 登录完成后，托盘菜单和桌面悬浮窗会显示余额信息。
 
 ## 配置中转站
@@ -44,6 +46,10 @@ npm start
   "baseUrl": "https://your-relay.example.com"
 }
 ```
+
+已内置适配：
+
+- Xiaomi MiMo 平台：填写 `https://platform.xiaomimimo.com`，或粘贴该站控制台页面地址。应用会自动使用 `/api/v1/tokenPlan/*` 相关接口。
 
 如果中转站接口路径和默认路径不一致，可以覆盖单个 path：
 
@@ -92,7 +98,7 @@ npm start
 - `/login` 登录页
 - `/dashboard/wallet` 钱包页
 
-如果接口返回结构不兼容，需要在 `main.js` 的 `fetchWalletBalance()` 中适配解析逻辑。
+如果接口返回结构不兼容，需要在 `balanceSnapshot.js` 中适配解析逻辑。
 
 ## 本地开发
 

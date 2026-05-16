@@ -3,6 +3,8 @@ const { app, BrowserWindow, Tray, Menu, session, nativeImage, shell, Notificatio
 const path = require('path');
 const fs = require('fs');
 const { buildRelayConfig, isPlaceholderRelayConfig } = require('./relayConfig');
+const { buildBalanceSnapshot, hasSessionIdentity } = require('./balanceSnapshot');
+const { isLikelyAuthCookieName } = require('./authCookie');
 const {
   buildOverlayRows,
   getDefaultOverlayPlacement,
@@ -156,7 +158,12 @@ function saveUserRelayBaseUrl(baseUrl) {
   } catch {
     data = {};
   }
-  data.baseUrl = baseUrl;
+  const effectiveConfig = buildRelayConfig({ baseUrl });
+  data.baseUrl = effectiveConfig.baseUrl;
+  if (effectiveConfig.preset) {
+    data.paths = effectiveConfig.paths;
+    data.preset = effectiveConfig.preset;
+  }
   fs.writeFileSync(userConfigPath, JSON.stringify(data, null, 2));
   reloadRelayConfig();
   return userConfigPath;
@@ -772,10 +779,7 @@ function getSession() {
 async function hasAuthCookie() {
   const ses = getSession();
   const cookies = await ses.cookies.get({ url: getRelayConfig().baseUrl });
-  return cookies.some((c) => {
-    const n = (c.name || '').toLowerCase();
-    return n.includes('session') || n.includes('authjs') || n.includes('token');
-  });
+  return cookies.some((c) => isLikelyAuthCookieName(c.name));
 }
 
 async function hasValidSession() {
@@ -789,8 +793,8 @@ async function hasValidSession() {
       }
     });
     if (!res.ok) return false;
-    const data = await res.json();
-    return !!data?.user?.id;
+    const data = await readJsonResponse(res, '登录态接口');
+    return hasSessionIdentity(data);
   } catch {
     return false;
   }
@@ -831,6 +835,27 @@ async function fetchSubscriptionWindow(commonHeaders) {
     }
   }
   return { start: null, expire: null };
+}
+
+async function readJsonResponse(res, label) {
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.toLowerCase().includes('application/json')) {
+    const text = await res.text().catch(() => '');
+    const preview = text.replace(/\s+/g, ' ').trim().slice(0, 80);
+    const suffix = preview ? `，返回内容开头: ${preview}` : '';
+    throw new Error(`${label} 返回的不是 JSON，可能填了网页页面地址，或该中转站接口路径不兼容${suffix}`);
+  }
+  return res.json();
+}
+
+async function readOptionalJsonResponse(res, label) {
+  if (!res.ok) return null;
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.toLowerCase().includes('application/json')) {
+    console.warn(`[relay-json] ${label} skipped non-json response: ${contentType}`);
+    return null;
+  }
+  return readJsonResponse(res, label);
 }
 
 async function fetchWalletBalance() {
@@ -876,65 +901,28 @@ async function fetchWalletBalance() {
       return;
     }
 
-    const walletData = await walletRes.json();
-    const sessionData = sessionRes.ok ? await sessionRes.json() : null;
-    const keysData = keysRes.ok ? await keysRes.json() : null;
-    const profileData = profileRes.ok ? await profileRes.json() : null;
-    const inviteData = inviteRes.ok ? await inviteRes.json() : null;
-    const balRaw = walletData?.data?.balance;
-    const bonusRaw = walletData?.data?.bonusBalance;
+    const walletData = await readJsonResponse(walletRes, '余额接口');
+    const sessionData = await readOptionalJsonResponse(sessionRes, '登录态接口');
+    const keysData = await readOptionalJsonResponse(keysRes, 'API Key 接口');
+    const profileData = await readOptionalJsonResponse(profileRes, '用户资料接口');
+    const inviteData = await readOptionalJsonResponse(inviteRes, '邀请信息接口');
+    const snapshot = buildBalanceSnapshot({
+      walletData,
+      sessionData,
+      keysData,
+      profileData,
+      inviteData,
+      subWindow,
+      relayConfig: getRelayConfig()
+    });
 
-    const bal = Number(balRaw);
-    const bonus = Number(bonusRaw);
-
-    const balCny = Number.isFinite(bal) ? (bal / 1000).toFixed(2) : '-';
-    const bonusCny = Number.isFinite(bonus) ? (bonus / 1000).toFixed(2) : '-';
-    const totalCny = (Number.isFinite(bal) ? bal : 0) + (Number.isFinite(bonus) ? bonus : 0);
-    const totalCnyText = (totalCny / 1000).toFixed(2);
-
-    const plan = sessionData?.user?.plan || '-';
-    // Prefer exact subscription window from dashboard payload.
-    const subStart = subWindow?.start || null;
-    const subExpire = subWindow?.expire || null;
-    const daysLeft = subExpire && !Number.isNaN(subExpire.getTime())
-      ? Math.max(0, Math.ceil((subExpire.getTime() - Date.now()) / (24 * 3600 * 1000)))
-      : null;
-
-    const keyRows = Array.isArray(keysData?.data) ? keysData.data : [];
-    const keySummary = keyRows
-      .map((k) => {
-        const name = k?.name || '(未命名)';
-        const total = Number(k?.totalConsumed || 0);
-        const cny = Number.isFinite(total) ? (total / 1000).toFixed(2) : '0.00';
-        return `${name}:¥${cny}`;
-      })
-      .join(' | ');
-
-    lastBalanceText = `余额: ${totalCnyText}`;
-    lastDetailText = `订阅￥${balCny} / 按量￥${bonusCny}`;
-    if (subStart && subExpire && !Number.isNaN(subStart.getTime()) && !Number.isNaN(subExpire.getTime())) {
-      lastPlanText = `当前订阅：${plan} ｜ 剩余${daysLeft}天`;
-    } else if (daysLeft !== null) {
-      lastPlanText = `当前订阅：${plan} ｜ 剩余${daysLeft}天`;
-    } else {
-      lastPlanText = `当前订阅：${plan}`;
-    }
-    lastKeysText = keySummary ? `API Keys: ${keySummary}` : 'API Keys: -';
-    const account = sessionData?.user?.phone || profileData?.user?.phone || profileData?.user?.email || '-';
-    lastAccountText = `账号: ${account}`;
-
-    const inviteCode =
-      inviteData?.data?.inviteCode ||
-      inviteData?.inviteCode ||
-      '';
-    const inviteLink =
-      inviteData?.data?.inviteLink ||
-      inviteData?.data?.inviteUrl ||
-      inviteData?.inviteLink ||
-      inviteData?.inviteUrl ||
-      (inviteCode ? getRelayConfig().urls.inviteRegister(inviteCode) : '');
-    lastInviteCodeText = inviteCode ? `邀请码: ${inviteCode}` : '邀请码: -';
-    lastInviteLink = inviteLink || '';
+    lastBalanceText = snapshot.balanceText;
+    lastDetailText = snapshot.detailText;
+    lastPlanText = snapshot.planText;
+    lastKeysText = snapshot.keysText;
+    lastAccountText = snapshot.accountText;
+    lastInviteCodeText = snapshot.inviteCodeText;
+    lastInviteLink = snapshot.inviteLink;
     updateTrayMenu();
   } catch (err) {
     lastBalanceText = '网络异常';

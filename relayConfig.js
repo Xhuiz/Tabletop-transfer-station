@@ -17,6 +17,30 @@ const DEFAULT_RELAY_CONFIG = {
   }
 };
 
+const RELAY_PRESETS = [
+  {
+    name: 'xiaomi-mimo',
+    hosts: new Set([
+      'platform.xiaomimimo.com',
+      'token-plan-cn.xiaomimimo.com'
+    ]),
+    baseUrl: 'https://platform.xiaomimimo.com',
+    paths: {
+      login: '/login',
+      dashboardWallet: '/console/balance',
+      walletApi: '/api/v1/tokenPlan/detail',
+      sessionApi: '/api/v1/userProfile',
+      apiKeysApi: '/api/v1/tokenPlan/apiKey',
+      profileApi: '/api/v1/userProfile',
+      inviteInfoApi: '/api/v1/userProfile',
+      inviteRegister: '/',
+      dashboardRscCandidates: [
+        '/console/balance'
+      ]
+    }
+  }
+];
+
 function isPlaceholderRelayConfig(config) {
   const baseUrl = typeof config === 'string' ? config : config?.baseUrl;
   if (!baseUrl) return false;
@@ -25,6 +49,16 @@ function isPlaceholderRelayConfig(config) {
     return hostname === 'example.com' || hostname.endsWith('.example.com');
   } catch {
     return false;
+  }
+}
+
+function getRelayPreset(baseUrl) {
+  try {
+    const { hostname } = new URL(baseUrl);
+    const normalizedHost = hostname.toLowerCase();
+    return RELAY_PRESETS.find((preset) => preset.hosts.has(normalizedHost)) || null;
+  } catch {
+    return null;
   }
 }
 
@@ -104,7 +138,16 @@ function buildRelayConfig(overrides = null, options = {}) {
   }
 
   config = mergeRelayConfig(config, overrides);
-  const baseUrl = normalizeBaseUrl(config.baseUrl);
+  let baseUrl = normalizeBaseUrl(config.baseUrl);
+  const preset = getRelayPreset(baseUrl);
+  if (preset) {
+    config = mergeRelayConfig(config, {
+      baseUrl: preset.baseUrl,
+      paths: preset.paths,
+      preset: preset.name
+    });
+    baseUrl = normalizeBaseUrl(preset.baseUrl);
+  }
 
   return {
     ...config,
@@ -116,6 +159,8 @@ function buildRelayConfig(overrides = null, options = {}) {
 
 module.exports = {
   DEFAULT_RELAY_CONFIG,
+  RELAY_PRESETS,
   buildRelayConfig,
+  getRelayPreset,
   isPlaceholderRelayConfig
 };

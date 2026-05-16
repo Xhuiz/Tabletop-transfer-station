@@ -48,6 +48,32 @@ test('buildRelayConfig supports per-endpoint path overrides', () => {
   ]);
 });
 
+test('buildRelayConfig applies Xiaomi MiMo preset from a pasted console url', () => {
+  const config = buildRelayConfig({
+    baseUrl: 'https://platform.xiaomimimo.com/console/balance?tab=token',
+    paths: {
+      walletApi: '/api/wallet',
+      sessionApi: '/api/auth/session'
+    }
+  });
+
+  assert.equal(config.baseUrl, 'https://platform.xiaomimimo.com');
+  assert.equal(config.urls.login, 'https://platform.xiaomimimo.com/login');
+  assert.equal(config.urls.dashboardWallet, 'https://platform.xiaomimimo.com/console/balance');
+  assert.equal(config.urls.walletApi, 'https://platform.xiaomimimo.com/api/v1/tokenPlan/detail');
+  assert.equal(config.urls.sessionApi, 'https://platform.xiaomimimo.com/api/v1/userProfile');
+  assert.equal(config.urls.apiKeysApi, 'https://platform.xiaomimimo.com/api/v1/tokenPlan/apiKey');
+});
+
+test('buildRelayConfig normalizes the Xiaomi token-plan host to the public platform host', () => {
+  const config = buildRelayConfig({
+    baseUrl: 'https://token-plan-cn.xiaomimimo.com'
+  });
+
+  assert.equal(config.baseUrl, 'https://platform.xiaomimimo.com');
+  assert.equal(config.urls.profileApi, 'https://platform.xiaomimimo.com/api/v1/userProfile');
+});
+
 test('buildRelayConfig can load relay.config.json from app and user locations', () => {
   const config = buildRelayConfig(null, {
     appConfigPath: path.join('app', 'relay.config.json'),
