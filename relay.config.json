@@ -4,6 +4,7 @@
     "login": "/login",
     "dashboardWallet": "/dashboard/wallet",
     "walletApi": "/api/wallet",
+    "usageApi": "/api/wallet",
     "sessionApi": "/api/auth/session",
     "apiKeysApi": "/api/apikeys?page=1&pageSize=20&sortBy=createdAt&sortOrder=desc",
     "profileApi": "/api/user/profile",

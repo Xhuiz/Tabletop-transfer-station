@@ -58,9 +58,14 @@ test('buildBalanceSnapshot supports Xiaomi token plan credit payloads', () => {
       code: 0,
       data: {
         planName: 'pro',
-        usedCredits: 1250,
         totalCredits: 10000,
         expireTime: new Date(Date.now() + 5 * 86400000).toISOString()
+      }
+    },
+    usageData: {
+      code: 0,
+      data: {
+        usedCredits: 1250
       }
     },
     sessionData: {
@@ -91,6 +96,42 @@ test('buildBalanceSnapshot supports Xiaomi token plan credit payloads', () => {
   assert.match(snapshot.planText, /^当前订阅：pro ｜ 剩余[45]天$/);
   assert.equal(snapshot.keysText, 'API Keys: 已配置');
   assert.equal(snapshot.accountText, '账号: user@example.com');
+});
+
+test('buildBalanceSnapshot treats successful empty Xiaomi payloads as no subscription', () => {
+  const snapshot = buildBalanceSnapshot({
+    walletData: {
+      code: 0,
+      data: null
+    },
+    usageData: {
+      code: 0,
+      data: {}
+    },
+    sessionData: {
+      code: 0,
+      data: {
+        phone: '+86 195****8160'
+      }
+    },
+    keysData: {
+      code: 0,
+      data: null
+    },
+    profileData: {},
+    inviteData: {},
+    subWindow: { start: null, expire: null },
+    relayConfig: {
+      urls: {
+        inviteRegister: (code) => `https://platform.xiaomimimo.com/register?inviteCode=${code}`
+      }
+    }
+  });
+
+  assert.equal(snapshot.balanceText, '余额: 暂无订阅');
+  assert.equal(snapshot.detailText, '未开通 Token Plan');
+  assert.equal(snapshot.planText, '当前订阅：暂无');
+  assert.equal(snapshot.accountText, '账号: +86 195****8160');
 });
 
 test('hasSessionIdentity accepts nested and flat user profile payloads', () => {

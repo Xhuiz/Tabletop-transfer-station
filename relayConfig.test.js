@@ -14,6 +14,7 @@ test('buildRelayConfig uses neutral relay defaults without a user config', () =>
   assert.equal(config.baseUrl, DEFAULT_RELAY_CONFIG.baseUrl);
   assert.equal(config.urls.login, 'https://relay.example.com/login');
   assert.equal(config.urls.walletApi, 'https://relay.example.com/api/wallet');
+  assert.equal(config.urls.usageApi, 'https://relay.example.com/api/wallet');
   assert.deepEqual(config.urls.dashboardRscCandidates, [
     'https://relay.example.com/dashboard'
   ]);
@@ -61,6 +62,7 @@ test('buildRelayConfig applies Xiaomi MiMo preset from a pasted console url', ()
   assert.equal(config.urls.login, 'https://platform.xiaomimimo.com/login');
   assert.equal(config.urls.dashboardWallet, 'https://platform.xiaomimimo.com/console/balance');
   assert.equal(config.urls.walletApi, 'https://platform.xiaomimimo.com/api/v1/tokenPlan/detail');
+  assert.equal(config.urls.usageApi, 'https://platform.xiaomimimo.com/api/v1/tokenPlan/usage');
   assert.equal(config.urls.sessionApi, 'https://platform.xiaomimimo.com/api/v1/userProfile');
   assert.equal(config.urls.apiKeysApi, 'https://platform.xiaomimimo.com/api/v1/tokenPlan/apiKey');
 });

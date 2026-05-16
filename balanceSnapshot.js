@@ -13,6 +13,13 @@ function isObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value);
 }
 
+function hasMeaningfulData(value) {
+  if (value === null || value === undefined) return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'object') return Object.keys(value).length > 0;
+  return true;
+}
+
 function walkValues(root, visitor, seen = new Set()) {
   if (!root || typeof root !== 'object') return null;
   if (seen.has(root)) return null;
@@ -191,6 +198,7 @@ function buildLegacySnapshot(input) {
 function buildCreditSnapshot(input) {
   const {
     walletData,
+    usageData,
     sessionData,
     keysData,
     profileData,
@@ -199,39 +207,54 @@ function buildCreditSnapshot(input) {
     relayConfig
   } = input;
 
-  const total = findNumberByKeys(walletData, [
+  const sourceData = [walletData, usageData];
+  const total = findNumberByKeys(sourceData, [
     'totalCredits',
     'totalCredit',
+    'totalCreditAmount',
     'creditLimit',
     'totalTokens',
     'tokenLimit',
+    'totalToken',
     'limitCredits',
+    'maxCredits',
+    'maxCredit',
     'limit',
     'quota',
     'total'
   ]);
-  const used = findNumberByKeys(walletData, [
+  const used = findNumberByKeys(sourceData, [
     'usedCredits',
     'usedCredit',
+    'usedCreditAmount',
     'creditUsed',
     'usedTokens',
     'usedToken',
+    'usedTokenAmount',
     'consumedCredits',
+    'consumedCredit',
     'usageCredits',
+    'usageCredit',
+    'usedAmount',
+    'totalUsage',
     'usage',
     'used',
     'consumed'
   ]);
-  let remaining = findNumberByKeys(walletData, [
+  let remaining = findNumberByKeys(sourceData, [
     'remainingCredits',
     'remainingCredit',
     'remainCredits',
     'remainCredit',
+    'remainCreditAmount',
     'availableCredits',
     'availableCredit',
+    'availableCreditAmount',
     'leftCredits',
+    'leftCredit',
     'creditBalance',
     'balanceCredits',
+    'balanceCredit',
     'remaining',
     'remain',
     'available'
@@ -244,7 +267,7 @@ function buildCreditSnapshot(input) {
   if (remaining === null && total === null && used === null) return null;
 
   const plan =
-    findStringByKeys(walletData, [
+    findStringByKeys(sourceData, [
       'planName',
       'planType',
       'packageName',
@@ -254,8 +277,8 @@ function buildCreditSnapshot(input) {
     ]) ||
     findStringByKeys(sessionData, ['plan', 'planName']) ||
     '-';
-  const start = subWindow?.start || findDateByKeys(walletData, ['startTime', 'startAt', 'periodStart']);
-  const expire = subWindow?.expire || findDateByKeys(walletData, [
+  const start = subWindow?.start || findDateByKeys(sourceData, ['startTime', 'startAt', 'periodStart']);
+  const expire = subWindow?.expire || findDateByKeys(sourceData, [
     'expireTime',
     'expiresAt',
     'expiredAt',
@@ -283,9 +306,43 @@ function buildCreditSnapshot(input) {
   };
 }
 
+function buildEmptySubscriptionSnapshot(input) {
+  const {
+    walletData,
+    usageData,
+    sessionData,
+    profileData,
+    keysData,
+    inviteData,
+    relayConfig
+  } = input;
+
+  const walletCode = walletData?.code ?? walletData?.status;
+  const usageCode = usageData?.code ?? usageData?.status;
+  const walletPayload = isObject(walletData) && 'data' in walletData ? walletData.data : walletData;
+  const usagePayload = isObject(usageData) && 'data' in usageData ? usageData.data : usageData;
+  const looksSuccessful =
+    walletCode === 0 || walletCode === 200 || usageCode === 0 || usageCode === 200;
+  if (!looksSuccessful || hasMeaningfulData(walletPayload) || hasMeaningfulData(usagePayload)) return null;
+
+  const keySummary = buildGenericKeySummary(keysData);
+  const invite = getInviteInfo(inviteData, relayConfig);
+
+  return {
+    balanceText: '余额: 暂无订阅',
+    detailText: '未开通 Token Plan',
+    planText: '当前订阅：暂无',
+    keysText: keySummary ? `API Keys: ${keySummary}` : 'API Keys: -',
+    accountText: getAccountText(sessionData, profileData),
+    inviteCodeText: invite.inviteCodeText,
+    inviteLink: invite.inviteLink
+  };
+}
+
 function buildBalanceSnapshot(input) {
   return buildLegacySnapshot(input) ||
     buildCreditSnapshot(input) ||
+    buildEmptySubscriptionSnapshot(input) ||
     {
       balanceText: '余额: -',
       detailText: '未识别余额接口返回结构',

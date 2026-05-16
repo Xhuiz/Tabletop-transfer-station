@@ -877,8 +877,9 @@ async function fetchWalletBalance() {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
     };
 
-    const [walletRes, sessionRes, keysRes, profileRes, inviteRes, subWindow] = await Promise.all([
+    const [walletRes, usageRes, sessionRes, keysRes, profileRes, inviteRes, subWindow] = await Promise.all([
       ses.fetch(getRelayConfig().urls.walletApi, { method: 'GET', headers: commonHeaders }),
+      ses.fetch(getRelayConfig().urls.usageApi, { method: 'GET', headers: commonHeaders }),
       ses.fetch(getRelayConfig().urls.sessionApi, { method: 'GET', headers: commonHeaders }),
       ses.fetch(getRelayConfig().urls.apiKeysApi, { method: 'GET', headers: commonHeaders }),
       ses.fetch(getRelayConfig().urls.profileApi, { method: 'GET', headers: commonHeaders }),
@@ -902,12 +903,14 @@ async function fetchWalletBalance() {
     }
 
     const walletData = await readJsonResponse(walletRes, '余额接口');
+    const usageData = await readOptionalJsonResponse(usageRes, '用量接口');
     const sessionData = await readOptionalJsonResponse(sessionRes, '登录态接口');
     const keysData = await readOptionalJsonResponse(keysRes, 'API Key 接口');
     const profileData = await readOptionalJsonResponse(profileRes, '用户资料接口');
     const inviteData = await readOptionalJsonResponse(inviteRes, '邀请信息接口');
     const snapshot = buildBalanceSnapshot({
       walletData,
+      usageData,
       sessionData,
       keysData,
       profileData,
