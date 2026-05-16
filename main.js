@@ -58,6 +58,7 @@ let loginDetectTimer = null;
 let refreshSeconds = 60;
 let pendingLoginCredentials = null;
 let setupIpcHandlersRegistered = false;
+let loginSuccessHandling = false;
 let overlayEnabled = true;
 let overlayVisible = false;
 let overlayEdge = 'right';
@@ -1017,19 +1018,18 @@ function openLoginWindow() {
   });
 
   const tryHandleLoginSuccess = async () => {
+    if (loginSuccessHandling) return;
+    loginSuccessHandling = true;
     const ok = await hasValidSession();
-    if (!ok) return;
+    if (!ok) {
+      loginSuccessHandling = false;
+      return;
+    }
     pendingLoginCredentials = null;
     lastBalanceText = '登录成功';
     lastDetailText = '正在拉取余额...';
     updateTrayMenu();
     await fetchWalletBalance();
-    if (Notification.isSupported()) {
-      new Notification({
-        title: APP_DISPLAY_NAME,
-        body: '登录成功，已刷新余额'
-      }).show();
-    }
     if (loginWin && !loginWin.isDestroyed()) {
       loginWin.close();
     }
@@ -1044,6 +1044,7 @@ function openLoginWindow() {
 
   loginWin.on('closed', () => {
     loginWin = null;
+    loginSuccessHandling = false;
     if (loginDetectTimer) {
       clearInterval(loginDetectTimer);
       loginDetectTimer = null;
