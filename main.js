@@ -13,6 +13,7 @@ const {
   getOverlayShapeRects,
   getNearestOverlayEdge,
   getOverlayPosition,
+  getOverlayMoveBounds,
   renderOverlayHtml,
   shouldTrackOverlayMove,
   shouldUpdateOverlaySizeFromBounds,
@@ -66,6 +67,7 @@ let overlaySavedBounds = null;
 let overlayResizeStart = null;
 let overlayAnimationTimer = null;
 let overlayProgrammaticMoveReleaseTimer = null;
+let overlayEnforcingSize = false;
 const REFRESH_OPTIONS = [5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600];
 let overlaySize = getOverlaySize();
 let relayConfig = null;
@@ -529,8 +531,15 @@ function moveOverlayWindow({ animated = true, onComplete = null } = {}) {
 
   if (overlayVisible) updateOverlayShape(true);
 
+  const setConfiguredBounds = (nextPosition) => {
+    overlayWin.setBounds(getOverlayMoveBounds({
+      position: nextPosition,
+      windowBounds: overlaySize
+    }), false);
+  };
+
   const finishMove = () => {
-    overlayWin.setPosition(position.x, position.y, false);
+    setConfiguredBounds(position);
     updateOverlayShape();
     releaseOverlayProgrammaticMoveSoon();
     if (onComplete) onComplete();
@@ -554,7 +563,7 @@ function moveOverlayWindow({ animated = true, onComplete = null } = {}) {
       return;
     }
     const frame = frames[frameIndex];
-    overlayWin.setPosition(frame.x, frame.y, false);
+    setConfiguredBounds(frame);
     frameIndex += 1;
     if (frameIndex >= frames.length) {
       stopOverlayAnimation();
@@ -574,7 +583,13 @@ function updateOverlayContent() {
 
 function updateOverlayShape(forceVisible = false) {
   if (!overlayWin || overlayWin.isDestroyed() || typeof overlayWin.setShape !== 'function') return;
-  const bounds = overlayWin.getBounds();
+  const current = overlayWin.getBounds();
+  const bounds = {
+    x: current.x,
+    y: current.y,
+    width: overlaySize.width,
+    height: overlaySize.height
+  };
   overlayWin.setShape(getOverlayShapeRects({
     windowBounds: bounds,
     edge: overlayEdge,
@@ -582,6 +597,21 @@ function updateOverlayShape(forceVisible = false) {
     peekSize: OVERLAY_PEEK_SIZE,
     handleSize: OVERLAY_REVEAL_HANDLE_SIZE
   }));
+}
+
+function enforceOverlayConfiguredSize() {
+  if (!overlayWin || overlayWin.isDestroyed() || overlayResizeStart || overlayEnforcingSize) return;
+  const bounds = overlayWin.getBounds();
+  if (bounds.width === overlaySize.width && bounds.height === overlaySize.height) return;
+  overlayEnforcingSize = true;
+  overlayWin.setBounds({
+    x: bounds.x,
+    y: bounds.y,
+    width: overlaySize.width,
+    height: overlaySize.height
+  }, false);
+  overlayEnforcingSize = false;
+  updateOverlayShape();
 }
 
 function setOverlayVisibility(visible) {
@@ -692,9 +722,7 @@ function createOverlayWindow() {
     if (channel === 'overlay-resize-move' && overlayResizeStart) {
       const width = Math.max(OVERLAY_MIN_WIDTH, overlayResizeStart.bounds.width + payload.x - overlayResizeStart.pointer.x);
       const height = Math.max(OVERLAY_MIN_HEIGHT, overlayResizeStart.bounds.height + payload.y - overlayResizeStart.pointer.y);
-      if (shouldUpdateOverlaySizeFromBounds({ overlayResizeActive: true, overlayProgrammaticMove })) {
-        overlaySize = { width, height };
-      }
+      overlaySize = { width, height };
       overlayWin.setBounds({
         x: overlayResizeStart.bounds.x,
         y: overlayResizeStart.bounds.y,
@@ -724,16 +752,7 @@ function createOverlayWindow() {
     }, 420);
   });
   overlayWin.on('resize', () => {
-    if (!shouldHandleOverlayResizeEvent({
-      overlayResizeActive: Boolean(overlayResizeStart),
-      overlayProgrammaticMove
-    })) return;
-    const bounds = overlayWin.getBounds();
-    overlaySize = {
-      width: bounds.width,
-      height: bounds.height
-    };
-    updateOverlayShape();
+    enforceOverlayConfiguredSize();
   });
   overlayWin.once('ready-to-show', () => {
     if (!overlayEnabled || !overlayWin || overlayWin.isDestroyed()) return;

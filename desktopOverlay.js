@@ -227,6 +227,15 @@ function getOverlayAnimationFrames({ from, to, frameCount = 12 }) {
   return frames;
 }
 
+function getOverlayMoveBounds({ position, windowBounds }) {
+  return {
+    x: position.x,
+    y: position.y,
+    width: windowBounds.width,
+    height: windowBounds.height
+  };
+}
+
 function shouldTrackOverlayMove({
   overlayVisible,
   overlayProgrammaticMove,
@@ -244,9 +253,10 @@ function shouldUpdateOverlaySizeFromBounds({
 
 function shouldHandleOverlayResizeEvent({
   overlayResizeActive,
-  overlayProgrammaticMove
+  overlayProgrammaticMove,
+  overlayEnforcingSize = false
 }) {
-  return Boolean(overlayResizeActive) && !overlayProgrammaticMove;
+  return Boolean(overlayResizeActive) && !overlayProgrammaticMove && !overlayEnforcingSize;
 }
 
 function escapeHtml(value) {
@@ -589,6 +599,7 @@ module.exports = {
   getNearestOverlayEdge,
   getOverlayPosition,
   getOverlayAnimationFrames,
+  getOverlayMoveBounds,
   shouldTrackOverlayMove,
   shouldUpdateOverlaySizeFromBounds,
   shouldHandleOverlayResizeEvent,

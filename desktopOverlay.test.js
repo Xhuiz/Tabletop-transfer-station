@@ -10,6 +10,7 @@ const {
   getOverlayPosition,
   getOverlayShapeRects,
   getOverlayAnimationFrames,
+  getOverlayMoveBounds,
   shouldTrackOverlayMove,
   shouldUpdateOverlaySizeFromBounds,
   shouldHandleOverlayResizeEvent,
@@ -136,6 +137,18 @@ test('getOverlayAnimationFrames eases between hidden and visible positions', () 
   ]);
 });
 
+test('getOverlayMoveBounds forces the configured size while moving', () => {
+  assert.deepEqual(getOverlayMoveBounds({
+    position: { x: 24, y: 24 },
+    windowBounds: { width: 280, height: 500 }
+  }), {
+    x: 24,
+    y: 24,
+    width: 280,
+    height: 500
+  });
+});
+
 test('shouldTrackOverlayMove ignores hidden programmatic positions', () => {
   assert.equal(shouldTrackOverlayMove({
     overlayVisible: false,
@@ -177,6 +190,11 @@ test('shouldHandleOverlayResizeEvent ignores passive resize noise', () => {
   assert.equal(shouldHandleOverlayResizeEvent({
     overlayResizeActive: true,
     overlayProgrammaticMove: true
+  }), false);
+  assert.equal(shouldHandleOverlayResizeEvent({
+    overlayResizeActive: true,
+    overlayProgrammaticMove: false,
+    overlayEnforcingSize: true
   }), false);
   assert.equal(shouldHandleOverlayResizeEvent({
     overlayResizeActive: true,
