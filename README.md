@@ -124,6 +124,8 @@ npm run build:mac
 
 产物位于 `dist/` 目录。
 
+也可以在 GitHub 仓库的 Actions 页面手动运行 `Build desktop installers`，云端会分别生成 Windows 安装包和 macOS x64/arm64 DMG。未配置 Apple Developer 证书时，macOS 产物是未签名版本，首次打开可能需要在系统设置里手动允许。
+
 在国内网络环境构建 Electron 时，可以临时设置镜像：
 
 ```powershell
