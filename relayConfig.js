@@ -17,6 +17,17 @@ const DEFAULT_RELAY_CONFIG = {
   }
 };
 
+function isPlaceholderRelayConfig(config) {
+  const baseUrl = typeof config === 'string' ? config : config?.baseUrl;
+  if (!baseUrl) return false;
+  try {
+    const { hostname } = new URL(baseUrl);
+    return hostname === 'example.com' || hostname.endsWith('.example.com');
+  } catch {
+    return false;
+  }
+}
+
 function readJsonFile(filePath) {
   if (!filePath || !fs.existsSync(filePath)) return null;
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
@@ -105,5 +116,6 @@ function buildRelayConfig(overrides = null, options = {}) {
 
 module.exports = {
   DEFAULT_RELAY_CONFIG,
-  buildRelayConfig
+  buildRelayConfig,
+  isPlaceholderRelayConfig
 };

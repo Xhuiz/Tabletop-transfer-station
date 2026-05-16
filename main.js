@@ -2,7 +2,7 @@
 const { app, BrowserWindow, Tray, Menu, session, nativeImage, shell, Notification, clipboard, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { buildRelayConfig } = require('./relayConfig');
+const { buildRelayConfig, isPlaceholderRelayConfig } = require('./relayConfig');
 const {
   buildOverlayRows,
   getDefaultOverlayPlacement,
@@ -133,6 +133,27 @@ function ensureUserRelayConfigFile() {
     fs.copyFileSync(APP_RELAY_CONFIG_PATH, userConfigPath);
   }
   return userConfigPath;
+}
+
+function relayNeedsSetup() {
+  return isPlaceholderRelayConfig(getRelayConfig());
+}
+
+function setRelaySetupState() {
+  const configPath = ensureUserRelayConfigFile();
+  lastBalanceText = '未配置中转站';
+  lastDetailText = `请修改配置文件: ${configPath}`;
+  lastPlanText = '配置后退出并重新启动应用';
+  lastKeysText = 'API Keys: -';
+  lastAccountText = '账号: -';
+  lastInviteCodeText = '邀请码: -';
+  lastInviteLink = '';
+  updateTrayMenu();
+  return configPath;
+}
+
+function openRelayConfigFile() {
+  return shell.openPath(ensureUserRelayConfigFile());
 }
 
 function loadOverlayConfig() {
@@ -694,6 +715,12 @@ async function fetchWalletBalance() {
 }
 
 function openLoginWindow() {
+  if (relayNeedsSetup()) {
+    setRelaySetupState();
+    openRelayConfigFile();
+    return;
+  }
+
   if (loginWin && !loginWin.isDestroyed()) {
     loginWin.focus();
     return;
@@ -792,6 +819,7 @@ function clearAuth(updateMenu = true) {
 function updateTrayMenu() {
   if (!tray) return;
 
+  const needsSetup = relayNeedsSetup();
   tray.setToolTip(`${APP_DISPLAY_NAME} ${lastBalanceText} - ${getRelayConfig().baseUrl}`);
   updateOverlayContent();
 
@@ -820,11 +848,12 @@ function updateTrayMenu() {
     },
     {
       label: '打开钱包页',
+      enabled: !needsSetup,
       click: () => shell.openExternal(getRelayConfig().urls.dashboardWallet)
     },
     {
       label: '打开中转站配置文件',
-      click: () => shell.openPath(ensureUserRelayConfigFile())
+      click: () => openRelayConfigFile()
     },
     {
       label: '打开配置目录',
@@ -832,6 +861,7 @@ function updateTrayMenu() {
     },
     {
       label: '立即刷新余额',
+      enabled: !needsSetup,
       click: () => fetchWalletBalance()
     },
     {
@@ -890,6 +920,11 @@ async function bootstrap() {
   tray = new Tray(createTrayIcon());
   createOverlayWindow();
   updateTrayMenu();
+
+  if (relayNeedsSetup()) {
+    setRelaySetupState();
+    return;
+  }
 
   const loggedIn = await hasValidSession();
   if (loggedIn) {

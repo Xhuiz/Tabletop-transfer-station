@@ -4,7 +4,8 @@ const path = require('node:path');
 
 const {
   DEFAULT_RELAY_CONFIG,
-  buildRelayConfig
+  buildRelayConfig,
+  isPlaceholderRelayConfig
 } = require('./relayConfig');
 
 test('buildRelayConfig uses neutral relay defaults without a user config', () => {
@@ -72,4 +73,11 @@ test('buildRelayConfig can load relay.config.json from app and user locations', 
 test('buildRelayConfig rejects unsafe base urls', () => {
   assert.throws(() => buildRelayConfig({ baseUrl: 'ftp://relay.example.com' }), /HTTP/);
   assert.throws(() => buildRelayConfig({ baseUrl: 'not a url' }), /Invalid/);
+});
+
+test('isPlaceholderRelayConfig detects example domains that still need user setup', () => {
+  assert.equal(isPlaceholderRelayConfig(buildRelayConfig()), true);
+  assert.equal(isPlaceholderRelayConfig(buildRelayConfig({ baseUrl: 'https://your-relay.example.com' })), true);
+  assert.equal(isPlaceholderRelayConfig(buildRelayConfig({ baseUrl: 'https://relay.example.cn' })), false);
+  assert.equal(isPlaceholderRelayConfig(buildRelayConfig({ baseUrl: 'https://relay.example.net' })), false);
 });
