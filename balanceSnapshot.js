@@ -339,19 +339,38 @@ function buildEmptySubscriptionSnapshot(input) {
   };
 }
 
+function buildPartialSnapshot(input) {
+  const {
+    sessionData,
+    profileData,
+    keysData,
+    inviteData,
+    relayConfig
+  } = input;
+
+  const plan =
+    sessionData?.user?.plan ||
+    findStringByKeys([sessionData, profileData], ['plan', 'planName']) ||
+    '-';
+  const keySummary = buildLegacyKeySummary(keysData) || buildGenericKeySummary(keysData);
+  const invite = getInviteInfo(inviteData, relayConfig);
+
+  return {
+    balanceText: '余额: -',
+    detailText: '余额接口不可用',
+    planText: `当前订阅：${plan}`,
+    keysText: keySummary ? `API Keys: ${keySummary}` : 'API Keys: -',
+    accountText: getAccountText(sessionData, profileData),
+    inviteCodeText: invite.inviteCodeText,
+    inviteLink: invite.inviteLink
+  };
+}
+
 function buildBalanceSnapshot(input) {
   return buildLegacySnapshot(input) ||
     buildCreditSnapshot(input) ||
     buildEmptySubscriptionSnapshot(input) ||
-    {
-      balanceText: '余额: -',
-      detailText: '未识别余额接口返回结构',
-      planText: '当前订阅：-',
-      keysText: 'API Keys: -',
-      accountText: getAccountText(input.sessionData, input.profileData),
-      inviteCodeText: '邀请码: -',
-      inviteLink: ''
-    };
+    buildPartialSnapshot(input);
 }
 
 function hasSessionIdentity(data) {

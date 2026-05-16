@@ -134,6 +134,45 @@ test('buildBalanceSnapshot treats successful empty Xiaomi payloads as no subscri
   assert.equal(snapshot.accountText, '账号: +86 195****8160');
 });
 
+test('buildBalanceSnapshot degrades when wallet is unavailable but account data exists', () => {
+  const snapshot = buildBalanceSnapshot({
+    walletData: null,
+    usageData: null,
+    sessionData: {
+      user: {
+        id: 'u-1',
+        phone: '19531238160',
+        plan: 'SHARE'
+      }
+    },
+    keysData: {
+      data: [
+        { name: 'Claude Code', totalConsumed: 360 },
+        { name: 'codex', totalConsumed: 159630 }
+      ]
+    },
+    profileData: {},
+    inviteData: {
+      data: {
+        inviteCode: 'IUTQ27'
+      }
+    },
+    subWindow: { start: null, expire: null },
+    relayConfig: {
+      urls: {
+        inviteRegister: (code) => `https://relay.example.com/register?inviteCode=${code}`
+      }
+    }
+  });
+
+  assert.equal(snapshot.balanceText, '余额: -');
+  assert.equal(snapshot.detailText, '余额接口不可用');
+  assert.equal(snapshot.planText, '当前订阅：SHARE');
+  assert.equal(snapshot.accountText, '账号: 19531238160');
+  assert.equal(snapshot.inviteCodeText, '邀请码: IUTQ27');
+  assert.equal(snapshot.keysText, 'API Keys: Claude Code:¥0.36 | codex:¥159.63');
+});
+
 test('hasSessionIdentity accepts nested and flat user profile payloads', () => {
   assert.equal(hasSessionIdentity({ user: { id: 'u-1' } }), true);
   assert.equal(hasSessionIdentity({ code: 0, data: { userId: 42 } }), true);

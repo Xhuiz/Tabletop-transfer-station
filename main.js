@@ -868,6 +868,7 @@ async function readOptionalJsonResponse(res, label) {
   const contentType = res.headers.get('content-type') || '';
   if (!contentType.toLowerCase().includes('application/json')) {
     console.warn(`[relay-json] ${label} skipped non-json response: ${contentType}`);
+    await res.text().catch(() => '');
     return null;
   }
   return readJsonResponse(res, label);
@@ -902,7 +903,7 @@ async function fetchWalletBalance() {
       fetchSubscriptionWindow(commonHeaders)
     ]);
 
-    if (walletRes.status === 401 || walletRes.status === 403) {
+    if ((walletRes.status === 401 || walletRes.status === 403) && (sessionRes.status === 401 || sessionRes.status === 403)) {
       await clearAuth(false);
       lastBalanceText = '登录已失效';
       lastDetailText = `HTTP ${walletRes.status}`;
@@ -910,14 +911,14 @@ async function fetchWalletBalance() {
       return;
     }
 
-    if (!walletRes.ok) {
+    if (!walletRes.ok && !sessionRes.ok && !keysRes.ok && !profileRes.ok && !inviteRes.ok) {
       lastBalanceText = '请求失败';
       lastDetailText = `HTTP ${walletRes.status}`;
       updateTrayMenu();
       return;
     }
 
-    const walletData = await readJsonResponse(walletRes, '余额接口');
+    const walletData = await readOptionalJsonResponse(walletRes, '余额接口');
     const usageData = await readOptionalJsonResponse(usageRes, '用量接口');
     const sessionData = await readOptionalJsonResponse(sessionRes, '登录态接口');
     const keysData = await readOptionalJsonResponse(keysRes, 'API Key 接口');
