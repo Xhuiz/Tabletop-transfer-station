@@ -1,0 +1,86 @@
+{
+  "name": "tabletop-transfer-station",
+  "version": "0.1.0",
+  "private": false,
+  "author": "Xhuiz",
+  "homepage": "https://github.com/Xhuiz/Tabletop-transfer-station",
+  "description": "Configurable Windows/macOS tray and desktop overlay balance monitor for compatible relay stations",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron --no-sandbox --disable-gpu-sandbox --disable-gpu .",
+    "test": "node --test desktopOverlay.test.js relayConfig.test.js",
+    "build:win": "electron-builder --win nsis",
+    "build:mac": "electron-builder --mac dmg"
+  },
+  "license": "MIT",
+  "keywords": [
+    "relay",
+    "balance",
+    "electron",
+    "tray",
+    "windows",
+    "macos"
+  ],
+  "devDependencies": {
+    "electron": "^41.5.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.tabletop.transfer.station",
+    "productName": "Tabletop transfer station",
+    "copyright": "Copyright (c) 2026 Xhuiz",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "files": [
+      "main.js",
+      "desktopOverlay.js",
+      "relayConfig.js",
+      "relay.config.json",
+      "relay.config.example.json",
+      "README.md",
+      "LICENSE",
+      "tray.ico",
+      "trayTemplate.png",
+      "icon.ico",
+      "icon.icns",
+      "icon-master.png",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "mac": {
+      "icon": "icon.icns",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
+    },
+    "win": {
+      "icon": "icon.ico",
+      "publisherName": "Xhuiz",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico",
+      "installerHeaderIcon": "icon.ico",
+      "shortcutName": "Tabletop transfer station",
+      "uninstallDisplayName": "Tabletop transfer station",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}
