@@ -76,6 +76,32 @@ test('buildRelayConfig normalizes the Xiaomi token-plan host to the public platf
   assert.equal(config.urls.profileApi, 'https://platform.xiaomimimo.com/api/v1/userProfile');
 });
 
+test('buildRelayConfig clears stale preset paths when switching to a generic relay', () => {
+  const config = buildRelayConfig({
+    baseUrl: 'https://www.aicodemirror.com',
+    preset: 'xiaomi-mimo',
+    paths: {
+      login: '/login',
+      dashboardWallet: '/console/balance',
+      walletApi: '/api/v1/tokenPlan/detail',
+      usageApi: '/api/v1/tokenPlan/usage',
+      sessionApi: '/api/v1/userProfile',
+      apiKeysApi: '/api/v1/tokenPlan/apiKey',
+      profileApi: '/api/v1/userProfile',
+      inviteInfoApi: '/api/v1/userProfile',
+      inviteRegister: '/',
+      dashboardRscCandidates: ['/console/balance']
+    }
+  });
+
+  assert.equal(config.baseUrl, 'https://www.aicodemirror.com');
+  assert.equal(config.preset, undefined);
+  assert.equal(config.urls.login, 'https://www.aicodemirror.com/login');
+  assert.equal(config.urls.walletApi, 'https://www.aicodemirror.com/api/wallet');
+  assert.equal(config.urls.sessionApi, 'https://www.aicodemirror.com/api/auth/session');
+  assert.equal(config.urls.dashboardWallet, 'https://www.aicodemirror.com/dashboard/wallet');
+});
+
 test('buildRelayConfig can load relay.config.json from app and user locations', () => {
   const config = buildRelayConfig(null, {
     appConfigPath: path.join('app', 'relay.config.json'),

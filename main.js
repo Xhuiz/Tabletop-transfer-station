@@ -166,6 +166,9 @@ function saveUserRelayBaseUrl(baseUrl) {
   if (effectiveConfig.preset) {
     data.paths = effectiveConfig.paths;
     data.preset = effectiveConfig.preset;
+  } else {
+    delete data.paths;
+    delete data.preset;
   }
   fs.writeFileSync(userConfigPath, JSON.stringify(data, null, 2));
   reloadRelayConfig();

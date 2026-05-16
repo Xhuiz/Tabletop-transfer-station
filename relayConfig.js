@@ -92,6 +92,23 @@ function mergeRelayConfig(baseConfig, overrideConfig) {
   };
 }
 
+function isPresetName(name) {
+  return RELAY_PRESETS.some((preset) => preset.name === name);
+}
+
+function stripStalePresetConfig(config) {
+  if (!isPresetName(config?.preset)) return config;
+  const preset = getRelayPreset(config.baseUrl);
+  if (preset?.name === config.preset) return config;
+  return {
+    ...config,
+    preset: undefined,
+    paths: {
+      ...DEFAULT_RELAY_CONFIG.paths
+    }
+  };
+}
+
 function joinUrl(baseUrl, routePath) {
   if (/^https?:\/\//i.test(routePath)) {
     return normalizeBaseUrl(routePath);
@@ -141,6 +158,7 @@ function buildRelayConfig(overrides = null, options = {}) {
   }
 
   config = mergeRelayConfig(config, overrides);
+  config = stripStalePresetConfig(config);
   let baseUrl = normalizeBaseUrl(config.baseUrl);
   const preset = getRelayPreset(baseUrl);
   if (preset) {
