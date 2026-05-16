@@ -73,6 +73,10 @@ function formatMoneyFromMilli(value) {
   return (value / 1000).toFixed(2);
 }
 
+function formatMoney(value) {
+  return value.toFixed(2);
+}
+
 function formatInteger(value) {
   if (!Number.isFinite(value)) return '-';
   return Math.max(0, Math.trunc(value)).toLocaleString('en-US');
@@ -306,6 +310,74 @@ function buildCreditSnapshot(input) {
   };
 }
 
+function buildUCloudSnapshot(input) {
+  const {
+    walletData,
+    sessionData,
+    keysData,
+    profileData,
+    inviteData,
+    relayConfig
+  } = input;
+
+  const sourceData = [walletData];
+  const available = findNumberByKeys(sourceData, [
+    'AmountAvailable',
+    'AvailableAmount',
+    'BalanceAvailable',
+    'AvailableBalance',
+    'amount_available',
+    'available_amount'
+  ]);
+  const amount = findNumberByKeys(sourceData, [
+    'Amount',
+    'Balance',
+    'TotalAmount',
+    'AccountBalance',
+    'UserBalance'
+  ]);
+  const free = findNumberByKeys(sourceData, [
+    'AmountFree',
+    'FreeAmount',
+    'GiftAmount',
+    'PresentAmount'
+  ]);
+  const frozen = findNumberByKeys(sourceData, [
+    'AmountFreeze',
+    'FrozenAmount',
+    'FreezeAmount'
+  ]);
+  const credit = findNumberByKeys(sourceData, [
+    'AmountCredit',
+    'CreditAmount',
+    'CreditBalance'
+  ]);
+
+  const primary = available ?? amount;
+  if (primary === null) return null;
+
+  const detailParts = [];
+  if (available !== null) detailParts.push(`可用 ¥${formatMoney(available)}`);
+  if (amount !== null) detailParts.push(`账户 ¥${formatMoney(amount)}`);
+  if (free !== null) detailParts.push(`赠送 ¥${formatMoney(free)}`);
+  if (frozen !== null) detailParts.push(`冻结 ¥${formatMoney(frozen)}`);
+  if (credit !== null && credit !== 0) detailParts.push(`授信 ¥${formatMoney(credit)}`);
+
+  const keySummary = buildGenericKeySummary(keysData);
+  const invite = getInviteInfo(inviteData, relayConfig);
+  const plan = findStringByKeys([sessionData, profileData], ['plan', 'planName']) || '-';
+
+  return {
+    balanceText: `余额: ¥${formatMoney(primary)}`,
+    detailText: detailParts.length ? detailParts.join(' / ') : 'UCloud 账户余额',
+    planText: buildPlanText(plan, null, null),
+    keysText: keySummary ? `API Keys: ${keySummary}` : 'API Keys: -',
+    accountText: getAccountText(sessionData, profileData),
+    inviteCodeText: invite.inviteCodeText,
+    inviteLink: invite.inviteLink
+  };
+}
+
 function buildEmptySubscriptionSnapshot(input) {
   const {
     walletData,
@@ -368,6 +440,7 @@ function buildPartialSnapshot(input) {
 
 function buildBalanceSnapshot(input) {
   return buildLegacySnapshot(input) ||
+    buildUCloudSnapshot(input) ||
     buildCreditSnapshot(input) ||
     buildEmptySubscriptionSnapshot(input) ||
     buildPartialSnapshot(input);

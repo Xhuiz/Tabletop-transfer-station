@@ -5,6 +5,7 @@ const fs = require('fs');
 const { buildRelayConfig, isPlaceholderRelayConfig } = require('./relayConfig');
 const { buildBalanceSnapshot, hasSessionIdentity } = require('./balanceSnapshot');
 const { isLikelyAuthCookieName } = require('./authCookie');
+const { buildUCloudActionBody, getUCloudRequestHeaders } = require('./relayProbe');
 const {
   buildOverlayRows,
   getDefaultOverlayPlacement,
@@ -792,23 +793,59 @@ function getSession() {
 }
 
 async function hasAuthCookie() {
-  const ses = getSession();
-  const cookies = await ses.cookies.get({ url: getRelayConfig().baseUrl });
+  const cookies = await getRelayCookies();
   return cookies.some((c) => isLikelyAuthCookieName(c.name));
+}
+
+async function getRelayCookies() {
+  const ses = getSession();
+  const config = getRelayConfig();
+  const cookieUrls = config.urls.cookieUrls || [config.baseUrl];
+  const cookieLists = await Promise.all(cookieUrls.map((url) => ses.cookies.get({ url }).catch(() => [])));
+  const seen = new Set();
+  return cookieLists.flat().filter((cookie) => {
+    const key = `${cookie.domain || ''}:${cookie.path || ''}:${cookie.name}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+async function getFetchOptionsForRelayUrl(_url, commonHeaders, action = null) {
+  const config = getRelayConfig();
+  if (config.adapter === 'ucloud-console' && action) {
+    const cookies = await getRelayCookies();
+    return {
+      method: 'POST',
+      headers: {
+        ...commonHeaders,
+        ...getUCloudRequestHeaders(cookies),
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'Origin': config.baseUrl,
+        'Referer': config.urls.dashboardWallet
+      },
+      body: buildUCloudActionBody(action, action === 'GetDataForConsoleVersion' ? { ingress: '1' } : {})
+    };
+  }
+
+  return { method: 'GET', headers: commonHeaders };
 }
 
 async function hasValidSession() {
   const ses = getSession();
   try {
-    const res = await ses.fetch(getRelayConfig().urls.sessionApi, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      }
-    });
+    const config = getRelayConfig();
+    const commonHeaders = {
+      'Accept': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    };
+    const action = config.adapter === 'ucloud-console' ? 'GetDataForConsoleVersion' : null;
+    const res = await ses.fetch(config.urls.sessionApi, await getFetchOptionsForRelayUrl(config.urls.sessionApi, commonHeaders, action));
     if (!res.ok) return false;
     const data = await readJsonResponse(res, '登录态接口');
+    if (config.adapter === 'ucloud-console') {
+      return data?.RetCode === 0 || hasSessionIdentity(data);
+    }
     return hasSessionIdentity(data);
   } catch {
     return false;
@@ -864,6 +901,7 @@ async function readJsonResponse(res, label) {
 }
 
 async function readOptionalJsonResponse(res, label) {
+  if (!res) return null;
   if (!res.ok) return null;
   const contentType = res.headers.get('content-type') || '';
   if (!contentType.toLowerCase().includes('application/json')) {
@@ -893,15 +931,48 @@ async function fetchWalletBalance() {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
     };
 
-    const [walletRes, usageRes, sessionRes, keysRes, profileRes, inviteRes, subWindow] = await Promise.all([
-      ses.fetch(getRelayConfig().urls.walletApi, { method: 'GET', headers: commonHeaders }),
-      ses.fetch(getRelayConfig().urls.usageApi, { method: 'GET', headers: commonHeaders }),
-      ses.fetch(getRelayConfig().urls.sessionApi, { method: 'GET', headers: commonHeaders }),
-      ses.fetch(getRelayConfig().urls.apiKeysApi, { method: 'GET', headers: commonHeaders }),
-      ses.fetch(getRelayConfig().urls.profileApi, { method: 'GET', headers: commonHeaders }),
-      ses.fetch(getRelayConfig().urls.inviteInfoApi, { method: 'GET', headers: commonHeaders }),
-      fetchSubscriptionWindow(commonHeaders)
-    ]);
+    const config = getRelayConfig();
+    const isUCloudConsole = config.adapter === 'ucloud-console';
+    let walletRes;
+    let usageRes;
+    let sessionRes;
+    let keysRes;
+    let profileRes;
+    let inviteRes;
+    let subWindow;
+    if (isUCloudConsole) {
+      const [walletOptions, sessionOptions] = await Promise.all([
+        getFetchOptionsForRelayUrl(config.urls.walletApi, commonHeaders, 'GetBalance'),
+        getFetchOptionsForRelayUrl(config.urls.sessionApi, commonHeaders, 'GetDataForConsoleVersion')
+      ]);
+      [walletRes, sessionRes, subWindow] = await Promise.all([
+        ses.fetch(config.urls.walletApi, walletOptions),
+        ses.fetch(config.urls.sessionApi, sessionOptions),
+        fetchSubscriptionWindow(commonHeaders)
+      ]);
+      usageRes = null;
+      keysRes = null;
+      profileRes = null;
+      inviteRes = null;
+    } else {
+      const [walletOptions, usageOptions, sessionOptions, keysOptions, profileOptions, inviteOptions] = await Promise.all([
+        getFetchOptionsForRelayUrl(config.urls.walletApi, commonHeaders),
+        getFetchOptionsForRelayUrl(config.urls.usageApi, commonHeaders),
+        getFetchOptionsForRelayUrl(config.urls.sessionApi, commonHeaders),
+        getFetchOptionsForRelayUrl(config.urls.apiKeysApi, commonHeaders),
+        getFetchOptionsForRelayUrl(config.urls.profileApi, commonHeaders),
+        getFetchOptionsForRelayUrl(config.urls.inviteInfoApi, commonHeaders)
+      ]);
+      [walletRes, usageRes, sessionRes, keysRes, profileRes, inviteRes, subWindow] = await Promise.all([
+        ses.fetch(config.urls.walletApi, walletOptions),
+        ses.fetch(config.urls.usageApi, usageOptions),
+        ses.fetch(config.urls.sessionApi, sessionOptions),
+        ses.fetch(config.urls.apiKeysApi, keysOptions),
+        ses.fetch(config.urls.profileApi, profileOptions),
+        ses.fetch(config.urls.inviteInfoApi, inviteOptions),
+        fetchSubscriptionWindow(commonHeaders)
+      ]);
+    }
 
     if ((walletRes.status === 401 || walletRes.status === 403) && (sessionRes.status === 401 || sessionRes.status === 403)) {
       await clearAuth(false);
@@ -911,7 +982,7 @@ async function fetchWalletBalance() {
       return;
     }
 
-    if (!walletRes.ok && !sessionRes.ok && !keysRes.ok && !profileRes.ok && !inviteRes.ok) {
+    if (!walletRes.ok && !sessionRes.ok && !keysRes?.ok && !profileRes?.ok && !inviteRes?.ok) {
       lastBalanceText = '请求失败';
       lastDetailText = `HTTP ${walletRes.status}`;
       updateTrayMenu();
@@ -932,7 +1003,7 @@ async function fetchWalletBalance() {
       profileData,
       inviteData,
       subWindow,
-      relayConfig: getRelayConfig()
+      relayConfig: config
     });
 
     lastBalanceText = snapshot.balanceText;

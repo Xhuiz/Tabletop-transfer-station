@@ -1,4 +1,5 @@
 const fs = require('node:fs');
+const { buildUCloudActionUrl, getUCloudConsoleAdapter } = require('./relayProbe');
 
 const DEFAULT_RELAY_CONFIG = {
   baseUrl: 'https://relay.example.com',
@@ -74,7 +75,11 @@ function normalizeBaseUrl(baseUrl) {
   if (!['http:', 'https:'].includes(parsed.protocol)) {
     throw new Error('Relay baseUrl must use HTTP or HTTPS.');
   }
-  parsed.pathname = parsed.pathname.replace(/\/+$/, '');
+  if (getUCloudConsoleAdapter(parsed.toString())) {
+    parsed.pathname = '';
+  } else {
+    parsed.pathname = parsed.pathname.replace(/\/+$/, '');
+  }
   parsed.search = '';
   parsed.hash = '';
   return parsed.toString().replace(/\/$/, '');
@@ -139,6 +144,28 @@ function buildUrls(baseUrl, paths) {
   };
 }
 
+function buildUCloudUrls(adapter) {
+  return {
+    login: adapter.loginUrl,
+    dashboardWallet: adapter.dashboardWalletUrl,
+    walletApi: buildUCloudActionUrl(adapter.apiBaseUrl, 'GetBalance'),
+    usageApi: buildUCloudActionUrl(adapter.apiBaseUrl, 'GetBalance'),
+    sessionApi: buildUCloudActionUrl(adapter.apiBaseUrl, 'GetDataForConsoleVersion'),
+    apiKeysApi: buildUCloudActionUrl(adapter.apiBaseUrl, 'GetBalance'),
+    profileApi: buildUCloudActionUrl(adapter.apiBaseUrl, 'GetDataForConsoleVersion'),
+    inviteInfoApi: buildUCloudActionUrl(adapter.apiBaseUrl, 'GetDataForConsoleVersion'),
+    dashboardRscCandidates: [
+      `${adapter.baseUrl}/dashboard`
+    ],
+    cookieUrls: adapter.cookieUrls,
+    inviteRegister: (inviteCode) => {
+      const url = new URL(`${adapter.baseUrl}/register`);
+      url.searchParams.set('inviteCode', inviteCode);
+      return url.toString();
+    }
+  };
+}
+
 function buildRelayConfig(overrides = null, options = {}) {
   const {
     appConfigPath = null,
@@ -168,6 +195,17 @@ function buildRelayConfig(overrides = null, options = {}) {
       preset: preset.name
     });
     baseUrl = normalizeBaseUrl(preset.baseUrl);
+  }
+
+  const ucloudAdapter = getUCloudConsoleAdapter(baseUrl);
+  if (ucloudAdapter) {
+    return {
+      ...config,
+      adapter: ucloudAdapter.name,
+      baseUrl: ucloudAdapter.baseUrl,
+      loadedConfigPaths,
+      urls: buildUCloudUrls(ucloudAdapter)
+    };
   }
 
   return {

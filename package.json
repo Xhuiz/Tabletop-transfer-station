@@ -8,7 +8,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron --no-sandbox --disable-gpu-sandbox --disable-gpu .",
-    "test": "node --test desktopOverlay.test.js relayConfig.test.js balanceSnapshot.test.js authCookie.test.js",
+    "test": "node --test desktopOverlay.test.js relayConfig.test.js relayProbe.test.js balanceSnapshot.test.js authCookie.test.js",
     "build:win": "electron-builder --win nsis",
     "build:mac": "electron-builder --mac dmg"
   },
@@ -33,6 +33,7 @@
     "files": [
       "main.js",
       "desktopOverlay.js",
+      "relayProbe.js",
       "relayConfig.js",
       "balanceSnapshot.js",
       "authCookie.js",

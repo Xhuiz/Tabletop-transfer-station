@@ -76,6 +76,24 @@ test('buildRelayConfig normalizes the Xiaomi token-plan host to the public platf
   assert.equal(config.urls.profileApi, 'https://platform.xiaomimimo.com/api/v1/userProfile');
 });
 
+test('buildRelayConfig detects UCloud channel consoles and points wallet calls at their Action API', () => {
+  const config = buildRelayConfig({
+    baseUrl: 'https://console.compshare.cn/dashboard/wallet'
+  });
+
+  assert.equal(config.baseUrl, 'https://console.compshare.cn');
+  assert.equal(config.adapter, 'ucloud-console');
+  assert.equal(config.urls.login, 'https://passport.compshare.cn?service=https%3A%2F%2Fconsole.compshare.cn%2Fdashboard%2Fwallet#login');
+  assert.equal(config.urls.dashboardWallet, 'https://console.compshare.cn/dashboard/wallet');
+  assert.equal(config.urls.walletApi, 'https://api.compshare.cn/?Action=GetBalance');
+  assert.equal(config.urls.sessionApi, 'https://api.compshare.cn/?Action=GetDataForConsoleVersion');
+  assert.deepEqual(config.urls.cookieUrls, [
+    'https://console.compshare.cn',
+    'https://api.compshare.cn',
+    'https://passport.compshare.cn'
+  ]);
+});
+
 test('buildRelayConfig clears stale preset paths when switching to a generic relay', () => {
   const config = buildRelayConfig({
     baseUrl: 'https://www.aicodemirror.com',

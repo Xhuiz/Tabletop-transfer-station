@@ -134,6 +134,39 @@ test('buildBalanceSnapshot treats successful empty Xiaomi payloads as no subscri
   assert.equal(snapshot.accountText, '账号: +86 195****8160');
 });
 
+test('buildBalanceSnapshot supports UCloud channel GetBalance payloads', () => {
+  const snapshot = buildBalanceSnapshot({
+    walletData: {
+      RetCode: 0,
+      Action: 'GetBalanceResponse',
+      Amount: 82.35,
+      AmountAvailable: 79.85,
+      AmountFree: 12.5,
+      AmountFreeze: 2.5,
+      AmountCredit: 0
+    },
+    usageData: null,
+    sessionData: {
+      RetCode: 0,
+      DataSet: {}
+    },
+    keysData: null,
+    profileData: {},
+    inviteData: {},
+    subWindow: { start: null, expire: null },
+    relayConfig: {
+      adapter: 'ucloud-console',
+      urls: {
+        inviteRegister: (code) => `https://console.compshare.cn/register?inviteCode=${code}`
+      }
+    }
+  });
+
+  assert.equal(snapshot.balanceText, '余额: ¥79.85');
+  assert.equal(snapshot.detailText, '可用 ¥79.85 / 账户 ¥82.35 / 赠送 ¥12.50 / 冻结 ¥2.50');
+  assert.equal(snapshot.planText, '当前订阅：-');
+});
+
 test('buildBalanceSnapshot degrades when wallet is unavailable but account data exists', () => {
   const snapshot = buildBalanceSnapshot({
     walletData: null,

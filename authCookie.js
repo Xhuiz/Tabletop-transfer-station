@@ -1,7 +1,10 @@
 const AUTH_COOKIE_NAMES = new Set([
   'api-platform_ph',
   'api-platform-st_ph',
-  'api-platform-pre_ph'
+  'api-platform-pre_ph',
+  'u_company_id',
+  'csrf_token',
+  'u_csrf_token'
 ]);
 
 function isLikelyAuthCookieName(name) {

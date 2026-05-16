@@ -14,6 +14,12 @@ test('isLikelyAuthCookieName accepts Xiaomi platform auth cookie names', () => {
   assert.equal(isLikelyAuthCookieName('api-platform-st_ph'), true);
 });
 
+test('isLikelyAuthCookieName accepts UCloud console session marker cookie names', () => {
+  assert.equal(isLikelyAuthCookieName('U_COMPANY_ID'), true);
+  assert.equal(isLikelyAuthCookieName('CSRF_TOKEN'), true);
+  assert.equal(isLikelyAuthCookieName('U_CSRF_TOKEN'), true);
+});
+
 test('isLikelyAuthCookieName ignores analytics-only cookie names', () => {
   assert.equal(isLikelyAuthCookieName('_onetrack_token'), false);
   assert.equal(isLikelyAuthCookieName('cookie-preferences'), false);
