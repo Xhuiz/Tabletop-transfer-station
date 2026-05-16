@@ -16,6 +16,7 @@ const {
   renderOverlayHtml,
   shouldTrackOverlayMove,
   shouldUpdateOverlaySizeFromBounds,
+  shouldHandleOverlayResizeEvent,
   shouldShowOverlayForCursor
 } = require('./desktopOverlay');
 
@@ -647,7 +648,7 @@ function createOverlayWindow() {
     ...overlaySize,
     frame: false,
     transparent: true,
-    resizable: true,
+    resizable: false,
     minWidth: OVERLAY_MIN_WIDTH,
     minHeight: OVERLAY_MIN_HEIGHT,
     movable: true,
@@ -723,25 +724,16 @@ function createOverlayWindow() {
     }, 420);
   });
   overlayWin.on('resize', () => {
-    if (!shouldTrackCurrentOverlayMove()) return;
+    if (!shouldHandleOverlayResizeEvent({
+      overlayResizeActive: Boolean(overlayResizeStart),
+      overlayProgrammaticMove
+    })) return;
     const bounds = overlayWin.getBounds();
-    if (shouldUpdateOverlaySizeFromBounds({ overlayResizeActive: true, overlayProgrammaticMove })) {
-      overlaySize = {
-        width: bounds.width,
-        height: bounds.height
-      };
-    }
-    if (overlayMoveTimer) clearTimeout(overlayMoveTimer);
-    overlayMoveTimer = setTimeout(() => {
-      overlaySavedBounds = {
-        x: bounds.x,
-        y: bounds.y,
-        width: bounds.width,
-        height: bounds.height
-      };
-      updateOverlayShape();
-      snapOverlayToNearestEdge();
-    }, 420);
+    overlaySize = {
+      width: bounds.width,
+      height: bounds.height
+    };
+    updateOverlayShape();
   });
   overlayWin.once('ready-to-show', () => {
     if (!overlayEnabled || !overlayWin || overlayWin.isDestroyed()) return;

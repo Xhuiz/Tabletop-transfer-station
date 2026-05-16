@@ -242,6 +242,13 @@ function shouldUpdateOverlaySizeFromBounds({
   return Boolean(overlayResizeActive) && !overlayProgrammaticMove;
 }
 
+function shouldHandleOverlayResizeEvent({
+  overlayResizeActive,
+  overlayProgrammaticMove
+}) {
+  return Boolean(overlayResizeActive) && !overlayProgrammaticMove;
+}
+
 function escapeHtml(value) {
   return String(value)
     .replace(/&/g, '&amp;')
@@ -584,5 +591,6 @@ module.exports = {
   getOverlayAnimationFrames,
   shouldTrackOverlayMove,
   shouldUpdateOverlaySizeFromBounds,
+  shouldHandleOverlayResizeEvent,
   renderOverlayHtml
 };

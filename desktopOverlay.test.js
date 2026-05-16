@@ -12,6 +12,7 @@ const {
   getOverlayAnimationFrames,
   shouldTrackOverlayMove,
   shouldUpdateOverlaySizeFromBounds,
+  shouldHandleOverlayResizeEvent,
   shouldShowOverlayForCursor
 } = require('./desktopOverlay');
 
@@ -163,6 +164,21 @@ test('shouldUpdateOverlaySizeFromBounds only allows explicit user resizing', () 
     overlayProgrammaticMove: false
   }), false);
   assert.equal(shouldUpdateOverlaySizeFromBounds({
+    overlayResizeActive: true,
+    overlayProgrammaticMove: false
+  }), true);
+});
+
+test('shouldHandleOverlayResizeEvent ignores passive resize noise', () => {
+  assert.equal(shouldHandleOverlayResizeEvent({
+    overlayResizeActive: false,
+    overlayProgrammaticMove: false
+  }), false);
+  assert.equal(shouldHandleOverlayResizeEvent({
+    overlayResizeActive: true,
+    overlayProgrammaticMove: true
+  }), false);
+  assert.equal(shouldHandleOverlayResizeEvent({
     overlayResizeActive: true,
     overlayProgrammaticMove: false
   }), true);
